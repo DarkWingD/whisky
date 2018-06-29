@@ -6,16 +6,11 @@ module.exports.inject = function (dependencies) {
     let mongo = dependencies.mongodb || require('mongodb');
     let connectionString = config.connectionString;
   
-    let databaseName = config.databaseName || 'exactquote';
-    let collectionName = 'ballparks';
+    let databaseName = config.databaseName || 'whisky-review';
+    let collectionName = 'reviews';
   
     let newUid = dependencies.uuid || require('uuid/v1');
-    let logger = dependencies.logger || require('./logger');
-  
-    let JiraClient = dependencies.jiraConnector || require('jira-connector');
-    let jiraHost = config.jiraHost;
-    let jiraAuth = config.jiraAuth;
-  
+    // let logger = dependencies.logger || require('./logger');  
   
     return {
       find: function (criteria) {
@@ -72,183 +67,9 @@ module.exports.inject = function (dependencies) {
             });
         });
       },
-      history: function (criteria) {
-        return new Promise(function (resolve, reject) {
-          mongo.MongoClient
-            .connect(connectionString)
-            .then(function (db) {
-              let dbo = db.db(databaseName);
-              dbo.collection(collectionName)
-                .aggregate([
-                  {
-                    $match: criteria
-                  },
-                  {
-                    $sort: { uid: 1, updatedOn: 1, createdOn: 1 }
-                  }
-                ])
-                .toArray(function (err, docs) {
-                  db.close();
-                  if (err) {
-                    logger.error(err);
-                    return reject(err);
-                  } else {
-                    return resolve(docs);
-                  }
-                });
-            })
-            .catch(function (err) {
-              logger.error(err);
-              return reject(err);
-            });
-        });
-      },
       save: function (ballpark) {
         return saveBallparkToDB(ballpark);
-      },
-      copy: function (ballpark) {
-        return createCopyOfBallpark(ballpark);
-      },
-      complete: function (ballpark) {
-        return new Promise(function (resolve, reject) {
-          mongo.MongoClient
-            .connect(connectionString)
-            .then(function (db) {
-              if (!mongo.ObjectID.isValid(ballpark._id)) {
-                return reject({ name: 'ValidationError', message: 'Id ' + criteria._id + ' is not valid.' });
-              }
-              let now = new Date();
-              let utcNow = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds());
-              let dbo = db.db(config.database);
-              return dbo.collection(collectionName)
-                .update(
-                  { _id: new mongo.ObjectID(ballpark._id) },
-                  { $set: { isComplete: true, completedOn: utcNow } })
-                .then((response) => {
-                  return resolve(response);
-                })
-                .catch((err) => {
-                  logger.error(err);
-                  return reject(err);
-                });
-            });
-        });
-      },
-      getJiraProject: function (projectCode) {
-        return new Promise(function (resolve, reject) {
-          let jira = new JiraClient({
-            host: jiraHost,
-            basic_auth: {
-              base64: jiraAuth
-            }
-          });
-          const query = {
-            jql: 'project=' + projectCode,
-            maxResults: '500'
-          };
-          jira.search.search(query
-            , function (error, issue) {
-              if (error) {
-                return reject(error);
-              } else {
-                return resolve(issue);
-              }
-            });
-        })
-      },
-      createJiraEpicsAndStories: function (ballparkId) {
-        return new Promise(function (resolve, reject) {
-          var promises = [];
-          findBallpark({ _id: ballparkId })
-            .then((result) => {
-              if (result.length != 1) {
-                return reject('Ballpark not found');
-              }
-              processJiraExportAsPromiseArray(result[0]).then(function (result) {
-                return resolve(result);
-              }).catch(function (error) {
-                return reject(error);
-              })
-            })
-            .catch(function (error) {
-              logger.error(error);
-              return reject(error);
-            });
-        })
       }
-    }
-  
-    async function processJiraExportAsPromiseArray(ballpark) {
-      var epicKey = '';
-      let hasChanges = false;
-      var taskSection = ballpark.sections.filter(section => section.type === 'tasks')[0];
-      var taskSectionIndex = ballpark.sections.indexOf(taskSection);
-      var results = [];
-      for (var taskIndex = 0; taskIndex < taskSection.tasks.length; taskIndex++) {
-        var task = ballpark.sections[taskSectionIndex].tasks[taskIndex];
-        if (task.jiraStoryId) {//already exported
-          epicKey = task.epicKey;//Get epic key incase next task requires it.
-        }
-        else {
-          if (typeof task.area !== 'undefined' && task.area) {
-            var epic = await createJiraEpic(ballpark.projectCode, task.area);
-            epicKey = epic.key;
-          }
-          var story = await createJiraStory(ballpark.projectCode, epicKey, task.description);
-          ballpark.sections[taskSectionIndex].tasks[taskIndex].jiraStoryId = story.id;
-          ballpark.sections[taskSectionIndex].tasks[taskIndex].epicKey = epicKey;
-          hasChanges = true;
-        }
-      }
-      if (hasChanges) {
-        return saveBallparkToDB(ballpark);
-      }
-      else {
-        return;
-      }
-    }
-  
-    function createCopyOfBallpark(ballpark) {
-      return new Promise(function (resolve, reject) {
-        mongo.MongoClient
-          .connect(connectionString)
-          .then(function (db) {
-            if (!ballpark.name) {
-              return reject({ name: 'ValidationError', message: 'Name is required.' });
-            }
-            if (typeof ballpark.name != 'string') {
-              return reject({ name: 'ValidationError', message: 'Name must be a string.' });
-            }
-            if (!ballpark.version) {
-              return reject({ name: 'ValidationError', message: 'Version cannot be empty.' });
-            }
-            if (ballpark.isComplete) {
-              ballpark.isComplete = undefined;
-              ballpark.completedOn = undefined;
-            }
-            let now = new Date();
-            let utcNow = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds());
-            ballpark.uid = newUid();
-            ballpark._id = undefined;
-            ballpark.createdOn = utcNow;
-            ballpark.updatedBy = ballpark.createdBy;
-            ballpark.updatedOn = ballpark.createdOn;
-  
-            ballpark.name = ballpark.name + ' - COPY';
-            let dbo = db.db(databaseName);
-            dbo.collection(collectionName)
-              .insertOne(ballpark, function (err, result) {
-                db.close();
-                if (err) {
-                  logger.error(err);
-                  return reject(err);
-                } else {
-                  let insertedDocument = result.ops[0];
-                  return resolve(insertedDocument);
-                }
-              });
-          });
-      });
     }
   
     function saveBallparkToDB(ballpark) {
@@ -370,70 +191,6 @@ module.exports.inject = function (dependencies) {
           });
       });
     }
-  
-    async function createJiraEpic(projectCode, taskDescription) {
-      return new Promise((resolve, reject) => {
-        let jira = new JiraClient({
-          host: jiraHost,
-          basic_auth: {
-            base64: jiraAuth
-          }
-        });
-        var data = {
-          'fields':
-            {
-              'customfield_10004': taskDescription,
-              'project': { 'key': projectCode },
-              'summary': taskDescription,
-              'description': taskDescription,
-              'issuetype': { 'name': 'Epic' }
-            }
-        };
-        try {
-          jira.issue.createIssue(data, (error, issue) => {
-            if (error) {
-              return reject(error.errorMessages);
-            } else {
-              return resolve(issue);
-            }
-          });
-        }
-        catch (error) { reject(error); }
-      })
-    };
-  
-    async function createJiraStory(projectCode, epicKey, taskDescription) {
-      return new Promise((resolve, reject) => {
-        let jira = new JiraClient({
-          host: jiraHost,
-          basic_auth: {
-            base64: jiraAuth
-          }
-        });
-        var data = {
-          'fields':
-            {
-              'project': { 'key': projectCode.toString() },
-              'summary': taskDescription,
-              'description': taskDescription,
-              'issuetype': { 'name': 'Story' },
-              'customfield_10001': epicKey
-            }
-        };
-        try {
-          jira.issue.createIssue(data, (error, issue) => {
-            if (error) {
-              return reject(error.errorMessages);
-            } else {
-              return resolve(issue);
-            }
-          });
-        }
-        catch (error) {
-          reject(error);
-        }
-      })
-    };
   
     function returnUtcFromDateString(dateString) {
       let now = new Date(dateString);
