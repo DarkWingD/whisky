@@ -1,3 +1,21 @@
-<p>
-  whisky-list works!
-</p>
+<table>
+  <thead>
+    <td>Brand</td>
+    <td>Age</td>
+    <td>Name</td>
+    <td>Edit</td>
+    <td>Reviews</td>
+  </thead>
+<tr class="ballpark-link" *ngFor="let whisky of whiskyList">
+      <td>{{whisky.brand}}</td>
+      <td>{{whisky.age}}</td>
+      <td>{{whisky.name}}</td>
+      <td>
+        <a href="#" class="btn btn-third btn-sml">Edit</a>
+      </td>
+      <td>
+        <a href="#" class="btn btn-third btn-sml">Reviews</a>
+      </td>
+    </tr>
+
+</table>

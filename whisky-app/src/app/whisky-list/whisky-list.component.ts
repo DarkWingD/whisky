@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { Whisky } from '../whisky';
 
 @Component({
   selector: 'app-whisky-list',
@@ -6,10 +7,12 @@ import { Component, OnInit } from '@angular/core';
   styleUrls: ['./whisky-list.component.css']
 })
 export class WhiskyListComponent implements OnInit {
-
+  whiskyList: any = []; 
   constructor() { }
 
   ngOnInit() {
+    let whisky1 = new Whisky();
+    this.whiskyList.push(whisky1);
   }
 
 }

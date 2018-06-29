@@ -19,8 +19,7 @@ const routes: Routes = [
   },
   {
     path: '',
-    component: WhiskyHomeComponent,
-    canActivate: [LoggedInGuard]
+    component: WhiskyHomeComponent
   },
   {
     path: 'create',
@@ -29,8 +28,7 @@ const routes: Routes = [
   },
   {
     path: 'list',
-    component: WhiskyListComponent,
-    canActivate: [LoggedInGuard]
+    component: WhiskyListComponent
   },
   {
     path: 'edit/:id',

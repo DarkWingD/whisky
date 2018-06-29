@@ -6,7 +6,7 @@ module.exports.inject = function (dependencies) {
     let mongo = dependencies.mongodb || require('mongodb');
     let connectionString = config.connectionString;
   
-    let databaseName = config.databaseName || 'whisky-review';
+    let databaseName = config.databaseName || 'whisky';
     let collectionName = 'reviews';
   
     let newUid = dependencies.uuid || require('uuid/v1');
